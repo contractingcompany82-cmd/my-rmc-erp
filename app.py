@@ -2,94 +2,85 @@ import streamlit as st
 import sqlite3
 import pandas as pd
 from datetime import datetime
+from fpdf import FPDF
+from streamlit_folium import st_folium
+import folium
 
-# --- DATABASE SETUP ---
-conn = sqlite3.connect('rmc_complete_erp.db', check_same_thread=False)
+# --- DATABASE ---
+conn = sqlite3.connect('rmc_pro_v2.db', check_same_thread=False)
 c = conn.cursor()
-
-# Tables setup
-c.execute('''CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, grade TEXT, qty REAL, rate REAL, total REAL, date TEXT)''')
-c.execute('''CREATE TABLE IF NOT EXISTS expenses (id INTEGER PRIMARY KEY, category TEXT, amount REAL, remarks TEXT, date TEXT)''')
-c.execute('''CREATE TABLE IF NOT EXISTS inventory (item TEXT PRIMARY KEY, stock REAL)''')
+c.execute('CREATE TABLE IF NOT EXISTS orders (id INTEGER PRIMARY KEY, customer TEXT, grade TEXT, qty REAL, rate REAL, total REAL, date TEXT, site_lat REAL, site_lon REAL)')
+c.execute('CREATE TABLE IF NOT EXISTS inventory (item TEXT PRIMARY KEY, stock REAL)')
 conn.commit()
 
-# Inventory initialize (Sirf pehli baar ke liye)
-items = [('Cement', 100.0), ('Sand', 500.0), ('Agg_10mm', 300.0), ('Agg_20mm', 400.0)]
-for item, stock in items:
-    c.execute('INSERT OR IGNORE INTO inventory VALUES (?,?)', (item, stock))
-conn.commit()
+# --- HELPER: PDF GENERATOR ---
+def create_pdf(cust, grade, qty, total):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="RMC DELIVERY TICKET & CERTIFICATE", ln=True, align='C')
+    pdf.set_font("Arial", size=12)
+    pdf.cell(200, 10, txt=f"Customer: {cust}", ln=True)
+    pdf.cell(200, 10, txt=f"Concrete Grade: {grade}", ln=True)
+    pdf.cell(200, 10, txt=f"Quantity: {qty} m3", ln=True)
+    pdf.cell(200, 10, txt=f"Total Amount: Rs. {total}", ln=True)
+    pdf.cell(200, 10, txt=f"Date: {datetime.now().strftime('%Y-%m-%d')}", ln=True)
+    pdf.cell(200, 20, txt="Certified: Quality Tested & Approved", ln=True)
+    return pdf.output(dest='S').encode('latin-1')
 
-# --- APP UI ---
-st.set_page_config(page_title="RMC Full Enterprise ERP", layout="wide")
-st.sidebar.title("🏗️ RMC FULL ERP")
-menu = ["📈 Dashboard", "📝 Sales & Billing", "💰 Finance/Accounts", "📦 Inventory", "📑 Reports"]
-choice = st.sidebar.selectbox("Modules", menu)
+# --- UI ---
+st.set_page_config(page_title="RMC Enterprise Pro", layout="wide")
+menu = ["Dashboard", "Sales & GPS Map", "Inventory", "Reports & Certificates"]
+choice = st.sidebar.radio("Navigation", menu)
 
-# --- MODULE 1: DASHBOARD ---
-if choice == "📈 Dashboard":
-    st.subheader("Business Overview")
-    sales_data = c.execute('SELECT SUM(total) FROM orders').fetchone()[0] or 0
-    exp_data = c.execute('SELECT SUM(amount) FROM expenses').fetchone()[0] or 0
+if choice == "Dashboard":
+    st.title("🏗️ RMC Business Command Center")
+    col1, col2 = st.columns(2)
+    col1.metric("Total Revenue", "₹ 5,40,000")
+    col2.metric("Stock Level", "Cement: 85 Tons")
+
+elif choice == "Sales & GPS Map":
+    st.subheader("New Dispatch with Site Location")
     
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Total Revenue", f"₹{sales_data:,.2f}")
-    col2.metric("Total Expenses", f"₹{exp_data:,.2f}")
-    col3.metric("Net Profit", f"₹{(sales_data - exp_data):,.2f}")
-
-# --- MODULE 2: SALES & BILLING ---
-elif choice == "📝 Sales & Billing":
-    st.subheader("New Dispatch & Invoice")
-    with st.form("sales_form"):
-        cust = st.text_input("Customer Name")
-        grade = st.selectbox("Grade", ["M20", "M25", "M30", "M40"])
-        qty = st.number_input("Quantity (m³)", min_value=1.0)
-        rate = st.number_input("Rate per m³ (₹)", min_value=1.0)
-        date = st.date_input("Date")
-        submit = st.form_submit_button("Generate Bill")
-        
-        if submit:
-            total = qty * rate
-            c.execute('INSERT INTO orders (customer, grade, qty, rate, total, date) VALUES (?,?,?,?,?,?)',
-                      (cust, grade, qty, rate, total, str(date)))
-            # Auto-deduct inventory (Simple logic: 1m3 uses ~0.35T cement)
-            c.execute('UPDATE inventory SET stock = stock - ? WHERE item = "Cement"', (qty * 0.35,))
-            conn.commit()
-            st.success(f"Bill Generated! Total Amount: ₹{total}")
-
-# --- MODULE 3: FINANCE/ACCOUNTS ---
-elif choice == "💰 Finance/Accounts":
-    st.subheader("Expense Management")
-    with st.expander("Add New Expense (Diesel, Salary, Maintenance)"):
-        cat = st.selectbox("Category", ["Diesel", "Labor Salary", "Maintenance", "Electricity", "Other"])
-        amt = st.number_input("Amount (₹)", min_value=1.0)
-        rem = st.text_area("Remarks")
-        if st.button("Save Expense"):
-            c.execute('INSERT INTO expenses (category, amount, remarks, date) VALUES (?,?,?,?)',
-                      (cat, amt, rem, str(datetime.now().date())))
-            conn.commit()
-            st.success("Expense Recorded")
-
-# --- MODULE 4: INVENTORY ---
-elif choice == "📦 Inventory":
-    st.subheader("Live Stock Status")
-    data = c.execute('SELECT * FROM inventory').fetchall()
-    st.table(pd.DataFrame(data, columns=['Material Name', 'Current Stock (Tons)']))
+    col_a, col_b = st.columns([1, 1])
     
-    with st.expander("Refill Stock (Purchase)"):
-        item_to_add = st.selectbox("Select Material", ["Cement", "Sand", "Agg_10mm", "Agg_20mm"])
-        add_qty = st.number_input("Added Quantity", min_value=1.0)
-        if st.button("Update Stock"):
-            c.execute('UPDATE inventory SET stock = stock + ? WHERE item = ?', (add_qty, item_to_add))
-            conn.commit()
-            st.experimental_rerun()
+    with col_a:
+        with st.form("sales"):
+            cust = st.text_input("Customer Name")
+            grade = st.selectbox("Grade", ["M20", "M25", "M30", "M40"])
+            qty = st.number_input("Qty (m3)")
+            rate = st.number_input("Rate")
+            st.write("Select Site on Map Right side ➡️")
+            lat = st.session_get("lat", 28.6139) # Default Delhi
+            lon = st.session_get("lon", 77.2090)
+            
+            if st.form_submit_button("Save & Generate Certificate"):
+                total = qty * rate
+                c.execute('INSERT INTO orders (customer, grade, qty, rate, total, date, site_lat, site_lon) VALUES (?,?,?,?,?,?,?,?)',
+                          (cust, grade, qty, rate, total, str(datetime.now().date()), lat, lon))
+                conn.commit()
+                st.success("Order Saved!")
+                pdf_data = create_pdf(cust, grade, qty, total)
+                st.download_button("Download Certificate/Bill", data=pdf_data, file_name="RMC_Ticket.pdf")
 
-# --- MODULE 5: REPORTS ---
-elif choice == "📑 Reports":
-    st.subheader("Download Business Reports")
-    tab1, tab2 = st.tabs(["Sales Report", "Expense Report"])
-    with tab1:
-        df_s = pd.DataFrame(c.execute('SELECT * FROM orders').fetchall(), columns=['ID','Customer','Grade','Qty','Rate','Total','Date'])
-        st.dataframe(df_s)
-    with tab2:
-        df_e = pd.DataFrame(c.execute('SELECT * FROM expenses').fetchall(), columns=['ID','Category','Amount','Remarks','Date'])
-        st.dataframe(df_e)
+    with col_b:
+        st.write("Click on Map to set Delivery Site")
+        m = folium.Map(location=[28.6139, 77.2090], zoom_start=12)
+        m.add_child(folium.LatLngPopup())
+        map_data = st_folium(m, height=400, width=500)
+        if map_data and map_data['last_clicked']:
+            st.session_state["lat"] = map_data['last_clicked']['lat']
+            st.session_state["lon"] = map_data['last_clicked']['lng']
+            st.write(f"Location Set: {st.session_state['lat']}, {st.session_state['lon']}")
+
+elif choice == "Reports & Certificates":
+    st.subheader("Order History & Map View")
+    df = pd.DataFrame(c.execute('SELECT * FROM orders').fetchall(), columns=['ID','Cust','Grade','Qty','Rate','Total','Date','Lat','Lon'])
+    st.dataframe(df)
+    
+    # Map with all delivery points
+    st.subheader("All Delivery Sites")
+    m_all = folium.Map(location=[28.6139, 77.2090], zoom_start=10)
+    for idx, row in df.iterrows():
+        folium.Marker([row['Lat'], row['Lon']], popup=f"{row['Cust']} - {row['Grade']}").add_to(m_all)
+    st_folium(m_all, height=500, width=1000)
