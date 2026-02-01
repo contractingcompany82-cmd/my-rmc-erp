@@ -3,83 +3,85 @@ import pandas as pd
 from datetime import datetime
 
 # --- CONFIG ---
-st.set_page_config(page_title="Custom Expense ERP", layout="wide")
+st.set_page_config(page_title="Pro School ERP", layout="wide")
 
-# --- DATABASE (Storage) ---
-if 'expenses' not in st.session_state:
-    st.session_state.expenses = []
-if 'categories' not in st.session_state:
-    st.session_state.categories = ["Diesel", "Raw Material", "Staff Salary", "Repairing", "Office Exp"]
+# --- DATABASE INITIALIZATION ---
+if 'students' not in st.session_state: st.session_state.students = []
+if 'staff' not in st.session_state: st.session_state.staff = []
+if 'fees' not in st.session_state: st.session_state.fees = []
+if 'classes' not in st.session_state: st.session_state.classes = ["1st", "2nd", "3rd", "10th", "12th"]
 
-# --- SIDEBAR: CUSTOMIZATION AREA ---
-st.sidebar.header("⚙️ ERP Customization")
+# --- SIDEBAR CUSTOMIZATION ---
+st.sidebar.title("🏫 School Admin Panel")
+menu = st.sidebar.radio("Select Module", ["📊 Dashboard", "🎓 Students", "👩‍🏫 Staff", "💰 Fees/Finance", "⚙️ Setup Classes"])
 
-# Add New Category
-new_cat = st.sidebar.text_input("Nayi Category Add Karein")
-if st.sidebar.button("Add Category"):
-    if new_cat and new_cat not in st.session_state.categories:
-        st.session_state.categories.append(new_cat)
-        st.sidebar.success(f"{new_cat} Add ho gayi!")
+# --- MODULE 1: SETUP CLASSES (CUSTOMIZATION) ---
+if menu == "⚙️ Setup Classes":
+    st.header("Customize School Structure")
+    new_class = st.text_input("Add New Class (e.g. 11th Science)")
+    if st.button("Add Class"):
+        if new_class not in st.session_state.classes:
+            st.session_state.classes.append(new_class)
+            st.success("Class Added!")
 
-# Remove Category
-rem_cat = st.sidebar.selectbox("Category Delete Karein", st.session_state.categories)
-if st.sidebar.button("Delete Category"):
-    st.session_state.categories.remove(rem_cat)
-    st.sidebar.warning(f"{rem_cat} Hata di gayi!")
+# --- MODULE 2: DASHBOARD ---
+elif menu == "📊 Dashboard":
+    st.header("School Overview")
+    c1, c2, c3 = st.columns(3)
+    c1.metric("Total Students", len(st.session_state.students))
+    c2.metric("Total Staff", len(st.session_state.staff))
+    total_fees = sum(f['Amount'] for f in st.session_state.fees)
+    c3.metric("Total Fees Collected", f"₹{total_fees:,}")
 
-# --- MAIN SCREEN ---
-st.title("💰 Expense Management System (RMC Custom)")
-st.markdown("---")
+    
 
-# Layout: Form and Summary
-col1, col2 = st.columns([1, 2])
+# --- MODULE 3: STUDENTS ---
+elif menu == "🎓 Students":
+    st.header("Student Admission & Records")
+    with st.expander("➕ New Admission"):
+        with st.form("stud_form"):
+            name = st.text_input("Student Name")
+            cls = st.selectbox("Assign Class", st.session_state.classes)
+            roll = st.text_input("Roll No.")
+            father = st.text_input("Father's Name")
+            if st.form_submit_button("Enroll Student"):
+                st.session_state.students.append({"Roll": roll, "Name": name, "Class": cls, "Father": father})
+                st.success("Admission Successful!")
+    
+    if st.session_state.students:
+        st.subheader("Student Directory")
+        st.dataframe(pd.DataFrame(st.session_state.students), use_container_width=True)
 
-with col1:
-    st.subheader("➕ Naya Kharcha Dalein")
-    with st.form("exp_form", clear_on_submit=True):
-        date = st.date_input("Tareekh", datetime.now())
-        cat = st.selectbox("Kharch ki Category", st.session_state.categories)
-        amount = st.number_input("Amount (Rs.)", min_value=0, step=100)
-        pay_mode = st.radio("Payment Mode", ["Cash", "Online/Bank", "Cheque"])
-        remark = st.text_input("Remark (Kisko diya / Kis liye)")
+# --- MODULE 4: STAFF ---
+elif menu == "👩‍🏫 Staff":
+    st.header("Teacher & Staff Management")
+    with st.form("staff_form"):
+        s_name = st.text_input("Staff Name")
+        s_role = st.selectbox("Role", ["Teacher", "Principal", "Admin", "Driver", "Peon"])
+        if st.form_submit_button("Add Staff"):
+            st.session_state.staff.append({"Name": s_name, "Role": s_role})
+            st.success("Staff Record Added!")
+    
+    st.table(pd.DataFrame(st.session_state.staff))
+
+# --- MODULE 5: FEES/FINANCE ---
+elif menu == "💰 Fees/Finance":
+    st.header("Fee Collection System")
+    if st.session_state.students:
+        stud_list = [f"{s['Name']} (Roll: {s['Roll']})" for s in st.session_state.students]
+        selected_stud = st.selectbox("Select Student", stud_list)
+        amount = st.number_input("Fee Amount Paid", min_value=0)
         
-        submit = st.form_submit_button("Record Expense")
+        if st.button("Submit Fee"):
+            st.session_state.fees.append({
+                "Date": datetime.now().date(),
+                "Student": selected_stud,
+                "Amount": amount
+            })
+            st.success(f"Fee of ₹{amount} recorded for {selected_stud}")
         
-        if submit:
-            entry = {
-                "Date": date,
-                "Category": cat,
-                "Amount": amount,
-                "Mode": pay_mode,
-                "Remark": remark
-            }
-            st.session_state.expenses.append(entry)
-            st.success("Kharcha Save Ho Gaya!")
-
-with col2:
-    st.subheader("📊 Kharchon ka Hisab")
-    if st.session_state.expenses:
-        df = pd.DataFrame(st.session_state.expenses)
-        
-        # Summary Metrics
-        total_exp = df['Amount'].sum()
-        st.metric("Total Kharcha", f"₹{total_exp:,}")
-        
-        # Data Table
-        st.dataframe(df, use_container_width=True)
-        
-        # Category wise Chart
-        st.subheader("Category Wise Analysis")
-        cat_total = df.groupby('Category')['Amount'].sum()
-        st.bar_chart(cat_total)
-        
-        # Download Button
-        csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Excel/CSV Download Karein", csv, "expenses.csv", "text/csv")
+        if st.session_state.fees:
+            st.subheader("Recent Transactions")
+            st.dataframe(pd.DataFrame(st.session_state.fees))
     else:
-        st.info("Abhi koi kharcha record nahi kiya gaya hai.")
-
-# --- CLEAR ALL DATA ---
-if st.sidebar.button("⚠️ Clear All Data"):
-    st.session_state.expenses = []
-    st.rerun()
+        st.warning("Please add students first to collect fees!")
