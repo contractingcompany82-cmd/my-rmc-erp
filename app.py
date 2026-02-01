@@ -2,90 +2,84 @@ import streamlit as st
 import pandas as pd
 from datetime import datetime
 
-# Page Settings
-st.set_page_config(page_title="RMC ERP Pro", layout="wide")
+# --- CONFIG ---
+st.set_page_config(page_title="Custom Expense ERP", layout="wide")
 
-# Title
-st.title("🏗️ RMC Enterprise Resource Planning (ERP)")
+# --- DATABASE (Storage) ---
+if 'expenses' not in st.session_state:
+    st.session_state.expenses = []
+if 'categories' not in st.session_state:
+    st.session_state.categories = ["Diesel", "Raw Material", "Staff Salary", "Repairing", "Office Exp"]
+
+# --- SIDEBAR: CUSTOMIZATION AREA ---
+st.sidebar.header("⚙️ ERP Customization")
+
+# Add New Category
+new_cat = st.sidebar.text_input("Nayi Category Add Karein")
+if st.sidebar.button("Add Category"):
+    if new_cat and new_cat not in st.session_state.categories:
+        st.session_state.categories.append(new_cat)
+        st.sidebar.success(f"{new_cat} Add ho gayi!")
+
+# Remove Category
+rem_cat = st.sidebar.selectbox("Category Delete Karein", st.session_state.categories)
+if st.sidebar.button("Delete Category"):
+    st.session_state.categories.remove(rem_cat)
+    st.sidebar.warning(f"{rem_cat} Hata di gayi!")
+
+# --- MAIN SCREEN ---
+st.title("💰 Expense Management System (RMC Custom)")
 st.markdown("---")
 
-# --- DATABASE IN MEMORY ---
-if 'sales' not in st.session_state: st.session_state.sales = []
-if 'expenses' not in st.session_state: st.session_state.expenses = []
-if 'inventory' not in st.session_state: 
-    st.session_state.inventory = {"Cement": 1000, "Sand": 500, "Grit": 800}
-if 'staff' not in st.session_state:
-    st.session_state.staff = [{"Name": "Rahul", "Role": "Driver", "Salary": 15000}]
+# Layout: Form and Summary
+col1, col2 = st.columns([1, 2])
 
-# --- SIDEBAR MENU ---
-menu = st.sidebar.selectbox("Go to Module", 
-    ["📊 Dashboard", "💰 Sales & Billing", "📉 Expenses & Finance", "👷 Staff & Salary", "📦 Inventory"])
-
-# --- 📊 DASHBOARD ---
-if menu == "📊 Dashboard":
-    st.subheader("Business Summary")
-    c1, c2, c3 = st.columns(3)
-    
-    rev = sum(s['Total'] for s in st.session_state.sales)
-    exp = sum(e['Amount'] for e in st.session_state.expenses)
-    
-    c1.metric("Total Revenue", f"₹{rev}")
-    c2.metric("Total Expenses", f"₹{exp}")
-    c3.metric("Profit", f"₹{rev - exp}")
-
-    st.markdown("---")
-    st.subheader("Recent Sales Table")
-    if st.session_state.sales:
-        st.table(pd.DataFrame(st.session_state.sales))
-    else:
-        st.write("No sales yet.")
-
-# --- 💰 SALES & BILLING ---
-elif menu == "💰 Sales & Billing":
-    st.subheader("New Sales Entry")
-    with st.form("sale_form"):
-        client = st.text_input("Customer Name")
-        qty = st.number_input("Quantity (m3)", min_value=1.0)
-        rate = st.number_input("Rate per m3", value=4500)
-        btn = st.form_submit_button("Generate Bill")
+with col1:
+    st.subheader("➕ Naya Kharcha Dalein")
+    with st.form("exp_form", clear_on_submit=True):
+        date = st.date_input("Tareekh", datetime.now())
+        cat = st.selectbox("Kharch ki Category", st.session_state.categories)
+        amount = st.number_input("Amount (Rs.)", min_value=0, step=100)
+        pay_mode = st.radio("Payment Mode", ["Cash", "Online/Bank", "Cheque"])
+        remark = st.text_input("Remark (Kisko diya / Kis liye)")
         
-        if btn:
-            total = qty * rate
-            st.session_state.sales.append({"Date": str(datetime.now().date()), "Client": client, "Qty": qty, "Total": total})
-            st.success(f"Sale Added! Total: ₹{total}")
+        submit = st.form_submit_button("Record Expense")
+        
+        if submit:
+            entry = {
+                "Date": date,
+                "Category": cat,
+                "Amount": amount,
+                "Mode": pay_mode,
+                "Remark": remark
+            }
+            st.session_state.expenses.append(entry)
+            st.success("Kharcha Save Ho Gaya!")
 
-# --- 📉 EXPENSES & FINANCE ---
-elif menu == "📉 Expenses & Finance":
-    st.subheader("Manage Expenses")
-    with st.form("exp_form"):
-        e_type = st.selectbox("Type", ["Diesel", "Electricity", "Maintenance", "Office"])
-        e_amt = st.number_input("Amount", min_value=1)
-        if st.form_submit_button("Add Expense"):
-            st.session_state.expenses.append({"Type": e_type, "Amount": e_amt, "Date": str(datetime.now().date())})
-            st.success("Expense Recorded")
-    
-    st.table(pd.DataFrame(st.session_state.expenses))
+with col2:
+    st.subheader("📊 Kharchon ka Hisab")
+    if st.session_state.expenses:
+        df = pd.DataFrame(st.session_state.expenses)
+        
+        # Summary Metrics
+        total_exp = df['Amount'].sum()
+        st.metric("Total Kharcha", f"₹{total_exp:,}")
+        
+        # Data Table
+        st.dataframe(df, use_container_width=True)
+        
+        # Category wise Chart
+        st.subheader("Category Wise Analysis")
+        cat_total = df.groupby('Category')['Amount'].sum()
+        st.bar_chart(cat_total)
+        
+        # Download Button
+        csv = df.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Excel/CSV Download Karein", csv, "expenses.csv", "text/csv")
+    else:
+        st.info("Abhi koi kharcha record nahi kiya gaya hai.")
 
-# --- 👷 STAFF & SALARY ---
-elif menu == "👷 Staff & Salary":
-    st.subheader("Employee Records")
-    st.table(pd.DataFrame(st.session_state.staff))
-    
-    with st.expander("Add New Employee"):
-        name = st.text_input("Staff Name")
-        role = st.text_input("Role")
-        sal = st.number_input("Salary", min_value=0)
-        if st.button("Save Staff"):
-            st.session_state.staff.append({"Name": name, "Role": role, "Salary": sal})
-            st.rerun()
-
-# --- 📦 INVENTORY ---
-elif menu == "📦 Inventory":
-    st.subheader("Current Stock Status")
-    for item, qty in st.session_state.inventory.items():
-        st.write(f"**{item}:** {qty}")
-    
-    new_qty = st.number_input("Add Cement (Bags)", min_value=0)
-    if st.button("Update Stock"):
-        st.session_state.inventory["Cement"] += new_qty
-        st.rerun()
+# --- CLEAR ALL DATA ---
+if st.sidebar.button("⚠️ Clear All Data"):
+    st.session_state.expenses = []
+    st.rerun()
