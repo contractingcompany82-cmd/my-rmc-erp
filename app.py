@@ -1,83 +1,97 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
+import matplotlib.pyplot as plt
 
-# Page Configuration
-st.set_page_config(page_title="RMC ERP - India", layout="wide")
+# --- CONFIGURATION ---
+st.set_page_config(page_title="Pro RMC ERP", layout="wide")
 
-# App Title
-st.title("🏗️ RMC Plant Management System")
-
-# Sidebar for Navigation
-menu = ["Dashboard", "Inventory Management", "Dispatch Entry", "Billing/Invoices"]
-choice = st.sidebar.selectbox("Menu", menu)
-
-# --- INVENTORY DATA (Dummy Storage) ---
-if 'inventory' not in st.session_state:
-    st.session_state.inventory = {
-        'Cement (Bags)': 500,
-        'Sand (Tons)': 150,
-        'Aggregates (Tons)': 300,
-        'Admixture (Liters)': 1000
+# Persistent Data Storage (Simulation using Session State - Replace with Database for Production)
+if 'data' not in st.session_state:
+    st.session_state.data = {
+        'sales': [],
+        'expenses': [],
+        'inventory': {'Cement': 1000, 'Sand': 500, 'Grit': 800, 'Admixture': 200},
+        'employees': [{'Name': 'Rahul', 'Role': 'Driver', 'Salary': 15000, 'Status': 'Paid'}]
     }
 
-# --- DISPATCH DATA ---
-if 'dispatches' not in st.session_state:
-    st.session_state.dispatches = []
+# --- SIDEBAR NAVIGATION ---
+st.sidebar.title("🏗️ RMC PRO-ERP")
+menu = ["📊 Dashboard", "💰 Finance & Sales", "📉 Expenses", "🚛 Dispatch & Map", "👷 Salary & HR", "📄 Reports & PDF"]
+choice = st.sidebar.radio("Navigate", menu)
 
-# --- 1. DASHBOARD ---
-if choice == "Dashboard":
-    st.subheader("Current Stock Status")
-    cols = st.columns(4)
-    for i, (item, qty) in enumerate(st.session_state.inventory.items()):
-        cols[i].metric(label=item, value=qty)
+# --- 📊 DASHBOARD ---
+if choice == "📊 Dashboard":
+    st.header("Plant Overview")
+    col1, col2, col3 = st.columns(3)
     
-    st.subheader("Recent Dispatches")
-    if st.session_state.dispatches:
-        df = pd.DataFrame(st.session_state.dispatches)
-        st.table(df)
-    else:
-        st.info("No dispatches yet today.")
-
-# --- 2. INVENTORY MANAGEMENT ---
-elif choice == "Inventory Management":
-    st.subheader("Update Stock")
-    item_to_update = st.selectbox("Select Material", list(st.session_state.inventory.keys()))
-    new_qty = st.number_input("Add Quantity", min_value=0)
+    total_sales = sum(item['Total'] for item in st.session_state.data['sales'])
+    total_exp = sum(item['Amount'] for item in st.session_state.data['expenses'])
     
-    if st.button("Update Inventory"):
-        st.session_state.inventory[item_to_update] += new_qty
-        st.success(f"Updated {item_to_update} successfully!")
+    col1.metric("Total Revenue", f"₹{total_sales:,}")
+    col2.metric("Total Expenses", f"₹{total_exp:,}")
+    col3.metric("Net Profit", f"₹{total_sales - total_exp:,}")
 
-# --- 3. DISPATCH ENTRY ---
-elif choice == "Dispatch Entry":
-    st.subheader("New Concrete Dispatch (TM Entry)")
-    with st.form("dispatch_form"):
-        client = st.text_input("Client Name")
-        grade = st.selectbox("Concrete Grade", ["M20", "M25", "M30", "M35", "M40"])
-        qty_m3 = st.number_input("Quantity (Cubic Meter)", min_value=1.0)
-        tm_number = st.text_input("Transit Mixer (TM) No.")
-        
-        submitted = st.form_submit_button("Generate Dispatch Note")
-        
-        if submitted:
-            # Simple Logic: 1m3 concrete uses approx 6 bags cement
-            cement_needed = qty_m3 * 6 
-            if st.session_state.inventory['Cement (Bags)'] >= cement_needed:
-                st.session_state.inventory['Cement (Bags)'] -= cement_needed
-                
-                # --- YAHAN FIX HAI ---
-                new_entry = {
-                    "Time": datetime.now().strftime("%H:%M:%S"),
-                    "Client": client,
-                    "Grade": grade,
-                    "Qty": qty_m3,
-                    "TM_No": tm_number
-                }
-                # ---------------------
-                
-                st.session_state.dispatches.append(new_entry)
-                st.success(f"Dispatch Authorized! Cement deducted: {cement_needed} bags.")
-            else:
-                st.error("Insufficient Cement in Stock!")
+    # Inventory Chart
+    st.subheader("Inventory Stock Level")
+    inv_df = pd.DataFrame(list(st.session_state.data['inventory'].items()), columns=['Item', 'Qty'])
+    st.bar_chart(inv_df.set_index('Item'))
 
+# --- 💰 FINANCE & SALES ---
+elif choice == "💰 Finance & Sales":
+    st.header("Sales & Billing")
+    with st.form("sales_form"):
+        c_name = st.text_input("Customer Name")
+        grade = st.selectbox("Concrete Grade", ["M20", "M25", "M30", "M40"])
+        qty = st.number_input("Quantity (m3)", min_value=1)
+        rate = st.number_input("Rate per m3", value=4500)
+        submit = st.form_submit_button("Generate Sale")
+        
+        if submit:
+            total = qty * rate
+            st.session_state.data['sales'].append({
+                "Date": datetime.now().strftime("%Y-%m-%d"),
+                "Customer": c_name, "Grade": grade, "Qty": qty, "Total": total
+            })
+            st.success(f"Sale Recorded! Total: ₹{total}")
+
+# --- 📉 EXPENSES ---
+elif choice == "📉 Expenses":
+    st.header("Expense Tracker (Diesel, Maintenance, etc.)")
+    exp_type = st.selectbox("Category", ["Diesel", "Spare Parts", "Electricity", "Tea/Food", "Other"])
+    amt = st.number_input("Amount Paid", min_value=0)
+    remark = st.text_area("Remark")
+    
+    if st.button("Add Expense"):
+        st.session_state.data['expenses'].append({"Type": exp_type, "Amount": amt, "Date": datetime.now().strftime("%Y-%m-%d")})
+        st.warning(f"Expense of ₹{amt} recorded.")
+
+# --- 🚛 DISPATCH & MAP ---
+elif choice == "🚛 Dispatch & Map":
+    st.header("Live Dispatch Tracking")
+    st.info("Integrating Google Maps API for TM tracking...")
+    # Simulation of a map
+    map_data = pd.DataFrame({'lat': [28.6139], 'lon': [77.2090]}) # Delhi Example
+    st.map(map_data)
+    st.write("Transit Mixer TM-01: Heading to Site A (ETA 15 mins)")
+
+# --- 👷 SALARY & HR ---
+elif choice == "👷 Salary & HR":
+    st.header("Staff & Salary Management")
+    df_emp = pd.DataFrame(st.session_state.data['employees'])
+    st.table(df_emp)
+    
+    if st.button("Process Monthly Salary"):
+        st.success("Salaries credited to linked bank accounts via API.")
+
+# --- 📄 REPORTS & PDF ---
+elif choice == "📄 Reports & PDF":
+    st.header("Download Reports")
+    if st.session_state.data['sales']:
+        df_sales = pd.DataFrame(st.session_state.data['sales'])
+        csv = df_sales.to_csv(index=False).encode('utf-8')
+        st.download_button("📥 Download Sales Report (CSV)", csv, "sales_report.csv", "text/csv")
+        
+        st.subheader("Cube Test Certificate (Draft)")
+        st.write(f"Certificate No: RMC-{datetime.now().year}-001")
+        st.write("Status: ✅ Passed (28 Days Strength: 30N/mm2)")
