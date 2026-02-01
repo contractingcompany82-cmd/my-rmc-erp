@@ -1,7 +1,2 @@
-streamlit==1.30.0
-pandas==2.1.0
-openpyxl==3.1.2
-pdfkit==1.0.0
-wkhtmltopdf==0.12.6
-sqlalchemy==2.1.2
-python-dotenv==1.0.0
+streamlit
+pandas
