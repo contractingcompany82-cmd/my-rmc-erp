@@ -65,8 +65,19 @@ elif choice == "Dispatch Entry":
             cement_needed = qty_m3 * 6 
             if st.session_state.inventory['Cement (Bags)'] >= cement_needed:
                 st.session_state.inventory['Cement (Bags)'] -= cement_needed
+                
+                # --- YAHAN FIX HAI ---
                 new_entry = {
                     "Time": datetime.now().strftime("%H:%M:%S"),
                     "Client": client,
                     "Grade": grade,
                     "Qty": qty_m3,
+                    "TM_No": tm_number
+                }
+                # ---------------------
+                
+                st.session_state.dispatches.append(new_entry)
+                st.success(f"Dispatch Authorized! Cement deducted: {cement_needed} bags.")
+            else:
+                st.error("Insufficient Cement in Stock!")
+
