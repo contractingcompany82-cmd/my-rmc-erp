@@ -1,87 +1,51 @@
 import streamlit as st
-import pandas as pd
+from fpdf import FPDF
 from datetime import datetime
+import pandas as pd
 
-# --- CONFIG ---
-st.set_page_config(page_title="Pro School ERP", layout="wide")
+# --- PDF GENERATOR CLASS ---
+class SalarySlip(FPDF):
+    def header(self):
+        # Company Name
+        self.set_font('Arial', 'B', 15)
+        self.cell(0, 10, 'GLOBAL RMC & CONSTRUCTIONS PVT LTD', 0, 1, 'C')
+        self.set_font('Arial', '', 10)
+        self.cell(0, 5, 'Plot No. 45, Industrial Area, Phase-1, New Delhi', 0, 1, 'C')
+        self.ln(10)
 
-# --- DATABASE INITIALIZATION ---
-if 'students' not in st.session_state: st.session_state.students = []
-if 'staff' not in st.session_state: st.session_state.staff = []
-if 'fees' not in st.session_state: st.session_state.fees = []
-if 'classes' not in st.session_state: st.session_state.classes = ["1st", "2nd", "3rd", "10th", "12th"]
-
-# --- SIDEBAR CUSTOMIZATION ---
-st.sidebar.title("🏫 School Admin Panel")
-menu = st.sidebar.radio("Select Module", ["📊 Dashboard", "🎓 Students", "👩‍🏫 Staff", "💰 Fees/Finance", "⚙️ Setup Classes"])
-
-# --- MODULE 1: SETUP CLASSES (CUSTOMIZATION) ---
-if menu == "⚙️ Setup Classes":
-    st.header("Customize School Structure")
-    new_class = st.text_input("Add New Class (e.g. 11th Science)")
-    if st.button("Add Class"):
-        if new_class not in st.session_state.classes:
-            st.session_state.classes.append(new_class)
-            st.success("Class Added!")
-
-# --- MODULE 2: DASHBOARD ---
-elif menu == "📊 Dashboard":
-    st.header("School Overview")
-    c1, c2, c3 = st.columns(3)
-    c1.metric("Total Students", len(st.session_state.students))
-    c2.metric("Total Staff", len(st.session_state.staff))
-    total_fees = sum(f['Amount'] for f in st.session_state.fees)
-    c3.metric("Total Fees Collected", f"₹{total_fees:,}")
-
-    
-
-# --- MODULE 3: STUDENTS ---
-elif menu == "🎓 Students":
-    st.header("Student Admission & Records")
-    with st.expander("➕ New Admission"):
-        with st.form("stud_form"):
-            name = st.text_input("Student Name")
-            cls = st.selectbox("Assign Class", st.session_state.classes)
-            roll = st.text_input("Roll No.")
-            father = st.text_input("Father's Name")
-            if st.form_submit_button("Enroll Student"):
-                st.session_state.students.append({"Roll": roll, "Name": name, "Class": cls, "Father": father})
-                st.success("Admission Successful!")
-    
-    if st.session_state.students:
-        st.subheader("Student Directory")
-        st.dataframe(pd.DataFrame(st.session_state.students), use_container_width=True)
-
-# --- MODULE 4: STAFF ---
-elif menu == "👩‍🏫 Staff":
-    st.header("Teacher & Staff Management")
-    with st.form("staff_form"):
-        s_name = st.text_input("Staff Name")
-        s_role = st.selectbox("Role", ["Teacher", "Principal", "Admin", "Driver", "Peon"])
-        if st.form_submit_button("Add Staff"):
-            st.session_state.staff.append({"Name": s_name, "Role": s_role})
-            st.success("Staff Record Added!")
-    
-    st.table(pd.DataFrame(st.session_state.staff))
-
-# --- MODULE 5: FEES/FINANCE ---
-elif menu == "💰 Fees/Finance":
-    st.header("Fee Collection System")
-    if st.session_state.students:
-        stud_list = [f"{s['Name']} (Roll: {s['Roll']})" for s in st.session_state.students]
-        selected_stud = st.selectbox("Select Student", stud_list)
-        amount = st.number_input("Fee Amount Paid", min_value=0)
+    def create_slip(self, data):
+        self.add_page()
+        self.set_font('Arial', 'B', 12)
+        self.cell(0, 10, f"Salary Slip for {data['month']}", 1, 1, 'C')
         
-        if st.button("Submit Fee"):
-            st.session_state.fees.append({
-                "Date": datetime.now().date(),
-                "Student": selected_stud,
-                "Amount": amount
-            })
-            st.success(f"Fee of ₹{amount} recorded for {selected_stud}")
+        # Employee Info Table
+        self.set_font('Arial', '', 10)
+        self.ln(5)
+        col_width = 45
+        row_height = 8
         
-        if st.session_state.fees:
-            st.subheader("Recent Transactions")
-            st.dataframe(pd.DataFrame(st.session_state.fees))
-    else:
-        st.warning("Please add students first to collect fees!")
+        details = [
+            ["Emp Name:", data['name'], "Emp ID:", data['emp_id']],
+            ["Department:", data['dept'], "Designation:", data['desig']],
+            ["Bank A/c:", data['bank_acc'], "Payment Mode:", data['pay_mode']]
+        ]
+        
+        for row in details:
+            self.set_font('Arial', 'B', 10)
+            self.cell(col_width, row_height, row[0], border=1)
+            self.set_font('Arial', '', 10)
+            self.cell(col_width, row_height, row[1], border=1)
+            self.set_font('Arial', 'B', 10)
+            self.cell(col_width, row_height, row[2], border=1)
+            self.set_font('Arial', '', 10)
+            self.cell(col_width, row_height, row[3], border=1, ln=1)
+
+        self.ln(10)
+        
+        # Earnings and Deductions Header
+        self.set_font('Arial', 'B', 10)
+        self.cell(95, row_height, "EARNINGS", border=1, align='C')
+        self.cell(95, row_height, "DEDUCTIONS", border=1, align='C', ln=1)
+        
+        # Salary Rows
+        self.set_font('Arial', '', 10)
