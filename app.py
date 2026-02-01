@@ -1,97 +1,46 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-import matplotlib.pyplot as plt
 
-# --- CONFIGURATION ---
-st.set_page_config(page_title="Pro RMC ERP", layout="wide")
+# --- 1. CONFIG & STYLING ---
+st.set_page_config(page_title="RMC Enterprise Resource Planning", layout="wide")
 
-# Persistent Data Storage (Simulation using Session State - Replace with Database for Production)
-if 'data' not in st.session_state:
-    st.session_state.data = {
-        'sales': [],
-        'expenses': [],
-        'inventory': {'Cement': 1000, 'Sand': 500, 'Grit': 800, 'Admixture': 200},
-        'employees': [{'Name': 'Rahul', 'Role': 'Driver', 'Salary': 15000, 'Status': 'Paid'}]
-    }
+# Custom CSS for Professional Look
+st.markdown("""
+    <style>
+    .main { background-color: #f5f7f9; }
+    .stButton>button { width: 100%; border-radius: 5px; height: 3em; background-color: #007bff; color: white; }
+    </style>
+    """, unsafe_allow_html=True)
 
-# --- SIDEBAR NAVIGATION ---
-st.sidebar.title("🏗️ RMC PRO-ERP")
-menu = ["📊 Dashboard", "💰 Finance & Sales", "📉 Expenses", "🚛 Dispatch & Map", "👷 Salary & HR", "📄 Reports & PDF"]
-choice = st.sidebar.radio("Navigate", menu)
+# --- 2. DATABASE INITIALIZATION ---
+# Real-world mein yahan SQL connect hoga, abhi ke liye Session State hai.
+if 'db_sales' not in st.session_state: st.session_state.db_sales = []
+if 'db_expenses' not in st.session_state: st.session_state.db_expenses = []
+if 'db_inventory' not in st.session_state: 
+    st.session_state.db_inventory = {"Cement": 5000, "Sand": 2000, "Aggregates": 3500, "Admixture": 500}
+if 'db_staff' not in st.session_state: 
+    st.session_state.db_staff = [{"ID": "001", "Name": "Admin", "Role": "Manager", "Salary": 50000}]
 
-# --- 📊 DASHBOARD ---
-if choice == "📊 Dashboard":
-    st.header("Plant Overview")
-    col1, col2, col3 = st.columns(3)
+# --- 3. MODULAR FUNCTIONS (Yahan se Add/Remove karein) ---
+
+def show_dashboard():
+    st.header("📊 Business Overview")
+    col1, col2, col3, col4 = st.columns(4)
     
-    total_sales = sum(item['Total'] for item in st.session_state.data['sales'])
-    total_exp = sum(item['Amount'] for item in st.session_state.data['expenses'])
+    total_revenue = sum(x['Total'] for x in st.session_state.db_sales)
+    total_expense = sum(x['Amount'] for x in st.session_state.db_expenses)
     
-    col1.metric("Total Revenue", f"₹{total_sales:,}")
-    col2.metric("Total Expenses", f"₹{total_exp:,}")
-    col3.metric("Net Profit", f"₹{total_sales - total_exp:,}")
-
-    # Inventory Chart
-    st.subheader("Inventory Stock Level")
-    inv_df = pd.DataFrame(list(st.session_state.data['inventory'].items()), columns=['Item', 'Qty'])
-    st.bar_chart(inv_df.set_index('Item'))
-
-# --- 💰 FINANCE & SALES ---
-elif choice == "💰 Finance & Sales":
-    st.header("Sales & Billing")
-    with st.form("sales_form"):
-        c_name = st.text_input("Customer Name")
-        grade = st.selectbox("Concrete Grade", ["M20", "M25", "M30", "M40"])
-        qty = st.number_input("Quantity (m3)", min_value=1)
-        rate = st.number_input("Rate per m3", value=4500)
-        submit = st.form_submit_button("Generate Sale")
-        
-        if submit:
-            total = qty * rate
-            st.session_state.data['sales'].append({
-                "Date": datetime.now().strftime("%Y-%m-%d"),
-                "Customer": c_name, "Grade": grade, "Qty": qty, "Total": total
-            })
-            st.success(f"Sale Recorded! Total: ₹{total}")
-
-# --- 📉 EXPENSES ---
-elif choice == "📉 Expenses":
-    st.header("Expense Tracker (Diesel, Maintenance, etc.)")
-    exp_type = st.selectbox("Category", ["Diesel", "Spare Parts", "Electricity", "Tea/Food", "Other"])
-    amt = st.number_input("Amount Paid", min_value=0)
-    remark = st.text_area("Remark")
+    col1.metric("Total Sales", f"₹{total_revenue:,}")
+    col2.metric("Total Expenses", f"₹{total_expense:,}")
+    col3.metric("Profit/Loss", f"₹{total_revenue - total_expense:,}")
+    col4.metric("Active Sites", len(set([x['Client'] for x in st.session_state.db_sales])))
     
-    if st.button("Add Expense"):
-        st.session_state.data['expenses'].append({"Type": exp_type, "Amount": amt, "Date": datetime.now().strftime("%Y-%m-%d")})
-        st.warning(f"Expense of ₹{amt} recorded.")
+    st.subheader("Inventory Stock")
+    st.bar_chart(pd.DataFrame.from_dict(st.session_state.db_inventory, orient='index', columns=['Qty']))
 
-# --- 🚛 DISPATCH & MAP ---
-elif choice == "🚛 Dispatch & Map":
-    st.header("Live Dispatch Tracking")
-    st.info("Integrating Google Maps API for TM tracking...")
-    # Simulation of a map
-    map_data = pd.DataFrame({'lat': [28.6139], 'lon': [77.2090]}) # Delhi Example
-    st.map(map_data)
-    st.write("Transit Mixer TM-01: Heading to Site A (ETA 15 mins)")
-
-# --- 👷 SALARY & HR ---
-elif choice == "👷 Salary & HR":
-    st.header("Staff & Salary Management")
-    df_emp = pd.DataFrame(st.session_state.data['employees'])
-    st.table(df_emp)
-    
-    if st.button("Process Monthly Salary"):
-        st.success("Salaries credited to linked bank accounts via API.")
-
-# --- 📄 REPORTS & PDF ---
-elif choice == "📄 Reports & PDF":
-    st.header("Download Reports")
-    if st.session_state.data['sales']:
-        df_sales = pd.DataFrame(st.session_state.data['sales'])
-        csv = df_sales.to_csv(index=False).encode('utf-8')
-        st.download_button("📥 Download Sales Report (CSV)", csv, "sales_report.csv", "text/csv")
-        
-        st.subheader("Cube Test Certificate (Draft)")
-        st.write(f"Certificate No: RMC-{datetime.now().year}-001")
-        st.write("Status: ✅ Passed (28 Days Strength: 30N/mm2)")
+def manage_sales():
+    st.header("💰 Sales & Dispatch")
+    with st.expander("➕ New Dispatch Entry"):
+        with st.form("sales_form"):
+            c_
